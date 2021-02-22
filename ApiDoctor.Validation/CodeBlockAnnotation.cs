@@ -458,6 +458,13 @@ namespace ApiDoctor.Validation
                     response.BlockType = InferBlockType(codeBlock, response.ResourceType);
                 }
             }
+
+            if (response.BlockType == CodeBlockType.Ignored && response.MethodName != null && response.MethodName.Count > 0)
+                {
+                    // This is temporary quickfix
+                    // aim is to enable testing on whether this change is safe or would cause raptor tests to fail
+                     response.BlockType = InferBlockType(codeBlock, response.ResourceType);
+                }
             return response;
         }
 
