@@ -23,6 +23,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+using System.Runtime.CompilerServices;
+
 namespace ApiDoctor.Validation
 {
     using System;
@@ -83,6 +85,7 @@ namespace ApiDoctor.Validation
             {
                 HttpRequest requestExample;
                 HttpParser.TryParseHttpRequest(request, out requestExample, methodIssues);
+                method.HttpRequest = requestExample;
                 if (!string.IsNullOrEmpty(requestExample?.Body) && requestExample.Body.Contains("{"))
                 {
                     if (string.IsNullOrEmpty(annotation.ResourceType))
@@ -125,7 +128,9 @@ namespace ApiDoctor.Validation
         /// The raw request data from the documentation (fenced code block with 
         /// annotation)
         /// </summary>
-        public string Request {get; private set;}
+        public string Request { get; private set; }
+
+        public HttpRequest HttpRequest { get; private set; }
 
         /// <summary>
         /// Properties about the Request populated from the documentation
@@ -147,8 +152,8 @@ namespace ApiDoctor.Validation
         /// The documentation file that was the source of this method
         /// </summary>
         /// <value>The source file.</value>
-        public DocFile SourceFile {get; private set;}
-        
+        public DocFile SourceFile { get; private set; }
+
         /// <summary>
         /// The raw HTTP response from the actual service
         /// </summary>
@@ -366,12 +371,12 @@ namespace ApiDoctor.Validation
                 builder = new UriBuilder(request.Url);
                 path = builder.Path;
             }
-            
+
             string[] parts = path.Split('/');
             if (parts.Length > 0)
             {
                 parts[parts.Length - 1] = $"{actionPrefix}{parts[parts.Length - 1]}";
-                path = "/"  + parts.ComponentsJoinedByString("/");
+                path = "/" + parts.ComponentsJoinedByString("/");
             }
 
             if (null != builder)
@@ -415,7 +420,7 @@ namespace ApiDoctor.Validation
                     request.Headers.Add(split[0], split[1]);
                 }
             }
-        }    
+        }
 
         internal static void AddAccessTokenToRequest(AuthenicationCredentials credentials, HttpRequest request)
         {
@@ -471,7 +476,7 @@ namespace ApiDoctor.Validation
 
                 if (param.Value == null)
                     request.Headers.Remove(headerName);
-                else 
+                else
                     request.Headers[headerName] = param.Value;
             }
         }

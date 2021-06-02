@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ApiDoctor.ConsoleApp": {
+      "commandName": "Project",
+      "commandLineArgs": "export-examples --path C:\\Projects\\microsoft-graph-docs --export-destination C:\\Examples"
+    }
+  }
+}

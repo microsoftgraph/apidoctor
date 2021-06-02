@@ -35,14 +35,20 @@ namespace ApiDoctor.ConsoleApp
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
+
     using ApiDoctor.DocumentationGeneration;
     using ApiDoctor.Validation.Config;
     using ApiDoctor.Validation.OData.Transformation;
+
     using AppVeyor;
+
     using CommandLine;
+
     using Newtonsoft.Json;
+
     using Publishing.Html;
     using Publishing.Swagger;
+
     using Validation;
     using Validation.Error;
     using Validation.Http;
@@ -76,7 +82,7 @@ namespace ApiDoctor.ConsoleApp
 
             try
             {
-                Parser.Default.ParseArguments<PrintOptions, CheckLinkOptions, BasicCheckOptions, CheckAllLinkOptions, CheckServiceOptions, PublishOptions, PublishMetadataOptions, CheckMetadataOptions, FixDocsOptions, GenerateDocsOptions, GenerateSnippetsOptions, AboutOptions>(args)
+                Parser.Default.ParseArguments<PrintOptions, CheckLinkOptions, BasicCheckOptions, CheckAllLinkOptions, CheckServiceOptions, PublishOptions, PublishMetadataOptions, CheckMetadataOptions, FixDocsOptions, GenerateDocsOptions, GenerateSnippetsOptions, AboutOptions, ExportExamplesOptions>(args)
                         .WithParsed<BaseOptions>((options) =>
                         {
                             IgnoreErrors = options.IgnoreErrors;
@@ -88,7 +94,7 @@ namespace ApiDoctor.ConsoleApp
 #endif
 
                             SetStateFromOptions(options);
-                        })    
+                        })
                         .MapResult(
                             (PrintOptions options) => RunInvokedMethodAsync(options),
                             (CheckLinkOptions options) => RunInvokedMethodAsync(options),
@@ -102,6 +108,7 @@ namespace ApiDoctor.ConsoleApp
                             (GenerateDocsOptions options) => RunInvokedMethodAsync(options),
                             (AboutOptions options) => RunInvokedMethodAsync(options),
                             (GenerateSnippetsOptions options) => RunInvokedMethodAsync(options),
+                            (ExportExamplesOptions options) => RunInvokedMethodAsync(options),
                             (errors) =>
                                     {
                                         FancyConsole.WriteLine(ConsoleColor.Red, "COMMAND LINE PARSE ERROR");
@@ -171,7 +178,7 @@ namespace ApiDoctor.ConsoleApp
         }
         private static async Task RunInvokedMethodAsync(BaseOptions options)
         {
-            var issues = new IssueLogger()
+            var issues = new IssueLogger
             {
 #if DEBUG
                 DebugLine = options.AttachDebugger,
@@ -228,6 +235,9 @@ namespace ApiDoctor.ConsoleApp
                     PrintAboutMessage();
                     Exit(failure: false);
                     break;
+                case ExportExamplesOptions o:
+                    returnSuccess = await ExportExamples(o, issues);
+                    break;
             }
 
             WriteMessages(
@@ -248,6 +258,22 @@ namespace ApiDoctor.ConsoleApp
             Exit(failure: !returnSuccess);
         }
 
+        private static async Task<bool> ExportExamples(ExportExamplesOptions exportExamplesOptions, IssueLogger issues)
+        {
+            var docset = await GetDocSetAsync(exportExamplesOptions, issues);
+            if (null == docset)
+                return false;
+            var requests = docset.Files.SelectMany(c => c.Requests);
+            foreach (var request in requests)
+            {
+                var path = Path.Combine(exportExamplesOptions.Destination, request.SourceFile.DisplayName.Split(@"\", StringSplitOptions.RemoveEmptyEntries).Last());
+                Directory.CreateDirectory(path);
+                var filePath = Path.Combine(path, @$"{request.Identifier}.http");
+                await File.WriteAllTextAsync(filePath, request.Request);
+            }
+            return true;
+        }
+
         /// <summary>
         /// Perform all of the local documentation based checks. This is the "compile"
         /// command for the documentation that verifies that everything is clean inside the 
@@ -258,7 +284,6 @@ namespace ApiDoctor.ConsoleApp
         private static async Task<bool> CheckDocsAllAsync(CheckLinkOptions options, IssueLogger issues)
         {
             var docset = await GetDocSetAsync(options, issues);
-
             if (null == docset)
                 return false;
 
@@ -310,12 +335,12 @@ namespace ApiDoctor.ConsoleApp
                 tagsToInclude = String.Empty;
             }
 
-            DateTimeOffset start = DateTimeOffset.Now;
+            var stopWatch = new Stopwatch();
+            stopWatch.Start();
             set.ScanDocumentation(tagsToInclude, issues);
-            DateTimeOffset end = DateTimeOffset.Now;
-            TimeSpan duration = end.Subtract(start);
+            stopWatch.Stop();
 
-            FancyConsole.WriteLine($"Took {duration.TotalSeconds} to parse {set.Files.Length} source files.");
+            FancyConsole.WriteLine($"Took {stopWatch.Elapsed} to parse {set.Files.Length} source files.");
             return Task.FromResult<DocSet>(set);
         }
 
@@ -1884,7 +1909,7 @@ namespace ApiDoctor.ConsoleApp
         /// <param name="issues"></param>
         /// <param name="docs"></param>
         /// <returns>The success/failure of the task</returns>
-        private static async Task<bool> GenerateSnippetsAsync(GenerateSnippetsOptions options, IssueLogger issues , DocSet docs = null)
+        private static async Task<bool> GenerateSnippetsAsync(GenerateSnippetsOptions options, IssueLogger issues, DocSet docs = null)
         {
             if (!File.Exists(options.SnippetGeneratorPath))
             {
@@ -1967,7 +1992,8 @@ namespace ApiDoctor.ConsoleApp
         /// <param name="args">arguments to snippet generator</param>
         private static void GenerateSnippets(string executablePath, params string[] args)
         {
-            using var process = new Process{
+            using var process = new Process
+            {
                 StartInfo = new ProcessStartInfo(executablePath, string.Join(" ", args))
                 {
                     RedirectStandardError = true,
@@ -1976,7 +2002,8 @@ namespace ApiDoctor.ConsoleApp
             };
             using var outputWaitHandle = new AutoResetEvent(false);
             using var errorWaitHandle = new AutoResetEvent(false);
-            process.OutputDataReceived += (sender, e) => {
+            process.OutputDataReceived += (sender, e) =>
+            {
                 if (string.IsNullOrEmpty(e.Data))
                 {
                     outputWaitHandle.Set();
@@ -2065,7 +2092,8 @@ namespace ApiDoctor.ConsoleApp
                 File.WriteAllText(fileFullPath, ReplaceLFbyCRLF(request.FullHttpText(true)));
             }
         }
-        private static string ReplaceLFbyCRLF(string original) {
+        private static string ReplaceLFbyCRLF(string original)
+        {
             return original.Replace("\r\n", "\n").Replace("\n", "\r\n"); // we first replace CRLF by LF and then all LF by CRLF to avoid breaking any CRLF or missing any LF
         }
         /// <summary>
@@ -2135,7 +2163,7 @@ namespace ApiDoctor.ConsoleApp
                     case "FindRequestStartLine"://scan back to find the line where we can best place the http tab(start of request).
                         for (var identifierIndex = currentIndex; identifierIndex > 0; identifierIndex--)
                         {
-                            if (originalFileContents[identifierIndex].Contains("<!-- {") 
+                            if (originalFileContents[identifierIndex].Contains("<!-- {")
                                 || originalFileContents[identifierIndex].Contains("<!--{"))
                             {
                                 requestStartLine = identifierIndex;
@@ -2143,7 +2171,7 @@ namespace ApiDoctor.ConsoleApp
                                 parseStatus = "FindEndOfCodeBlock";
                                 break;
                             }
-                            if (originalFileContents[identifierIndex].Contains("```http") 
+                            if (originalFileContents[identifierIndex].Contains("```http")
                                 && HttpParser.ParseHttpRequest(method.Request).Method.Equals("GET"))
                             {
                                 originalFileContents[identifierIndex] = "```msgraph-interactive";
@@ -2187,24 +2215,24 @@ namespace ApiDoctor.ConsoleApp
             switch (parseStatus)
             {
                 case "FirstTabInsertion":
-                {
-                    includeText = $"{includeText}\r\n---\r\n";//append end of tab section
-
-                    /* Add the include link at the specified index together with the first tab */
-                    updatedFileContents = FileSplicer(originalFileContents, insertionLine, includeText);//inject the include text
-                    updatedFileContents = FileSplicer(updatedFileContents.ToArray(), requestStartLine-1, firstTabText);//inject the first tab section
-
-                    /* DUMP THE SDK LINK FILE */
-                    var sdkLinkDirectory = Path.Combine(Directory.GetParent(Path.GetDirectoryName(method.SourceFile.FullPath)).FullName, relativePathFolder);
-                    Directory.CreateDirectory(sdkLinkDirectory);
-                    // only dump a new file when it does not exist.
-                    var fullFileName = Path.Combine(sdkLinkDirectory, includeSdkFileName);
-                    if (!File.Exists(fullFileName))
                     {
-                        File.WriteAllText(fullFileName, includeSdkText);
+                        includeText = $"{includeText}\r\n---\r\n";//append end of tab section
+
+                        /* Add the include link at the specified index together with the first tab */
+                        updatedFileContents = FileSplicer(originalFileContents, insertionLine, includeText);//inject the include text
+                        updatedFileContents = FileSplicer(updatedFileContents.ToArray(), requestStartLine - 1, firstTabText);//inject the first tab section
+
+                        /* DUMP THE SDK LINK FILE */
+                        var sdkLinkDirectory = Path.Combine(Directory.GetParent(Path.GetDirectoryName(method.SourceFile.FullPath)).FullName, relativePathFolder);
+                        Directory.CreateDirectory(sdkLinkDirectory);
+                        // only dump a new file when it does not exist.
+                        var fullFileName = Path.Combine(sdkLinkDirectory, includeSdkFileName);
+                        if (!File.Exists(fullFileName))
+                        {
+                            File.WriteAllText(fullFileName, includeSdkText);
+                        }
+                        break;
                     }
-                    break;
-                }
                 case "AdditionalTabInsertion":
                     /* Add the include link at the specified index */
                     updatedFileContents = string.IsNullOrEmpty(includeText) ? originalFileContents : FileSplicer(originalFileContents, insertionLine, includeText);
@@ -2238,8 +2266,8 @@ namespace ApiDoctor.ConsoleApp
         /// <param name="request">Request with url to be verified or corrected</param>
         /// <param name="method">The <see cref="MethodDefinition"/> of the request being generated a snippet for</param>
         /// <param name="issues">Issue logger to record any issues</param>
-        private static HttpRequest PreProcessUrlForSnippetGeneration(HttpRequest request ,MethodDefinition method,IssueLogger issues)
-        {  
+        private static HttpRequest PreProcessUrlForSnippetGeneration(HttpRequest request, MethodDefinition method, IssueLogger issues)
+        {
             //Version 1.1 of HTTP protocol MUST specify the host header
             if (request.HttpVersion.Equals("HTTP/1.1"))
             {
@@ -2251,7 +2279,7 @@ namespace ApiDoctor.ConsoleApp
                         request.Url = WebUtility.UrlDecode(testUri.PathAndQuery);
                         var hostName = string.IsNullOrEmpty(testUri.Host) ? graphHostName : testUri.Host;
 
-                        if(request.Headers.AllKeys.Contains(hostHeaderKey))
+                        if (request.Headers.AllKeys.Contains(hostHeaderKey))
                             request.Headers[hostHeaderKey] = hostName;
                         else
                             request.Headers.Add(hostHeaderKey, hostName);
@@ -2259,7 +2287,7 @@ namespace ApiDoctor.ConsoleApp
                     catch (UriFormatException)
                     {
                         //cant determine host. Relative url with no host header
-                        if(request.Headers.AllKeys.Contains(hostHeaderKey))
+                        if (request.Headers.AllKeys.Contains(hostHeaderKey))
                             request.Headers[hostHeaderKey] = graphHostName;
                         else
                             request.Headers.Add(hostHeaderKey, graphHostName);

@@ -39,7 +39,7 @@ namespace ApiDoctor.Validation
             this.Metadata = annotation;
             this.SourceExample = content;
             this.SourceFile = source;
-
+            
             switch (language.ToLower())
             {
                 case "json":

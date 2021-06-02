@@ -28,11 +28,14 @@ namespace ApiDoctor.ConsoleApp
     using System;
     using System.Collections.Generic;
     using System.Linq;
+
     using ApiDoctor.ConsoleApp.Auth;
     using ApiDoctor.Validation;
     using ApiDoctor.Validation.Writers;
+
     using CommandLine;
     using CommandLine.Text;
+
     using Publishing.CSDL;
 
     class CommandLineOptions
@@ -51,10 +54,12 @@ namespace ApiDoctor.ConsoleApp
 
         public const string VerbGenerateDocs = "generate-docs";
         public const string VerbGenerateSnippets = "generate-snippets";
+        public const string VerbExportExamples = "export-examples";
     }
 
     [Verb(CommandLineOptions.VerbAbout, HelpText = "Print about information for this application.")]
     class AboutOptions : BaseOptions { }
+
     class BaseOptions
     {
 
@@ -610,5 +615,12 @@ namespace ApiDoctor.ConsoleApp
 
         [Option("custom-metadata-path", HelpText = "Path to custom metadata that snippet generation can consume", Required = false)]
         public string CustomMetadataPath { get; set; }
+    }
+
+    [Verb(CommandLineOptions.VerbExportExamples, HelpText = "Export Examples")]
+    class ExportExamplesOptions : DocSetOptions
+    {
+        [Option("export-destination", HelpText = "Full Path to Destination Folder", Required = true)]
+        public string Destination { get; set; }
     }
 }
